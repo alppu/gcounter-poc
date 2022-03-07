@@ -2,50 +2,55 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"server/gcounter"
 )
 
-// internal types
-type Message struct {
-	Message string `json:'message'`
-}
+var counter = gcounter.Initial()
 
-var messages []Message
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "hello")
-}
-
-func addMessage(w http.ResponseWriter, r *http.Request) {
+func getCounter(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // remove this after debugging
-	httpMethod := r.Method
-	if httpMethod == "POST" {
-		var message Message
-		err := json.NewDecoder(r.Body).Decode(&message)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		messages = append(messages, message)
-	}
+
+	json.NewEncoder(w).Encode(counter)
 }
 
-func getMessages(w http.ResponseWriter, r *http.Request) {
+func increment(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*") // remove this after debugging
-	httpMethod := r.Method
-	if httpMethod == "GET" {
-		json.NewEncoder(w).Encode(messages)
+
+	counter = gcounter.Inc(counter)
+
+	json.NewEncoder(w).Encode(counter)
+}
+
+/*
+Merge incoming
+*/
+func merge(w http.ResponseWriter, r *http.Request) {
+	var replica gcounter.GCounter
+	err := json.NewDecoder(r.Body).Decode(&replica)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
+	log.Println("start merge operation")
+	log.Println(replica.Counter)
+	counter = gcounter.Merge(counter, replica)
+	json.NewEncoder(w).Encode(counter)
+}
+
+func value(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(gcounter.Value(counter))
 }
 
 func main() {
-	http.HandleFunc("/", handler)
-	http.HandleFunc("/message", addMessage)
-	http.HandleFunc("/messages", getMessages)
-
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	port := os.Args[1:][0]
+	log.Println("Starting server in port: " + port)
+	http.HandleFunc("/counter/", getCounter)
+	http.HandleFunc("/increment/", increment)
+	http.HandleFunc("/value", value)
+	http.HandleFunc("/merge", merge)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
