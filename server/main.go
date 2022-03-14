@@ -46,11 +46,10 @@ func value(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	port := os.Args[1:][0]
-	log.Println("Starting server in port: " + port)
+	log.Println("Starting server in port: " + os.Getenv("PORT"))
 	http.HandleFunc("/counter/", getCounter)
 	http.HandleFunc("/increment/", increment)
 	http.HandleFunc("/value", value)
 	http.HandleFunc("/merge", merge)
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	log.Fatal(http.ListenAndServe(":"+os.Getenv("PORT"), nil))
 }
