@@ -58,8 +58,8 @@ type Service struct {
 func register() {
 	log.Println("Registering service")
 	req, _ := http.NewRequest("POST", "http://localhost:5000/register", nil)
-	// host, _ := os.Hostname()
-	req.Header.Set("x-forwarded-for", "localhost"+":"+os.Getenv("PORT"))
+	host, _ := os.Hostname()
+	req.Header.Set("x-forwarded-for", host+":"+os.Getenv("PORT"))
 	resp, err := http.DefaultClient.Do(req)
 
 	if err != nil {
