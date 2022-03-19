@@ -1,15 +1,14 @@
 package gcounter
 
-import "os"
-
 type GCounter struct {
 	Id      string         `json:"id"`
 	Counter map[string]int `json:"values"`
 }
 
-func Initial() GCounter {
+func Initial(id string) GCounter {
 	return GCounter{
-		Id:      os.Getenv("NODE"),
+		Id: id,
+		// Id:      os.Getenv("NODE"),
 		Counter: make(map[string]int),
 	}
 
