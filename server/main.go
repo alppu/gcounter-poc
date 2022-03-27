@@ -24,6 +24,8 @@ type Service struct {
 
 var cachedServices map[string]Service = make(map[string]Service)
 
+var serviceCircuitBreakerCount map[string]int = make(map[string]int)
+
 var counter gcounter.GCounter
 var serviceName string
 
@@ -97,8 +99,19 @@ func mergeReplicas() {
 			body, _ := json.Marshal(counter)
 			_, mergeError := http.Post("http://"+service.Address+"/merge", "application/jsonn", bytes.NewBuffer(body))
 			if mergeError != nil {
+				log.Println("Cannot connnect to service " + service.Name)
+				if serviceCircuitBreakerCount[service.Name] > 5 {
+					log.Println("Removing service " + service.Name + " from cache")
+
+				} else {
+					serviceCircuitBreakerCount[service.Name] += 1
+					delete(cachedServices, service.Name)
+					delete(serviceCircuitBreakerCount, service.Name)
+				}
 				log.Println("Failed to merge replica")
 				log.Println(mergeError)
+			} else {
+				serviceCircuitBreakerCount[service.Name] = 0
 			}
 		}
 	} else {
