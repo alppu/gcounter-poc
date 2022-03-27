@@ -22,6 +22,8 @@ type Service struct {
 	Address string `json:"address"`
 }
 
+var cachedServices map[string]Service = make(map[string]Service)
+
 var counter gcounter.GCounter
 var serviceName string
 
@@ -67,26 +69,42 @@ func mergeReplicas() {
 	if err != nil {
 		log.Println("Failed to get services from service registry")
 		log.Println(err)
-	} else {
+	}
+
+	// If the query endpoint succeeds we will then cache the registered services
+	if err == nil {
 		var response []Service
-		err2 := json.NewDecoder(resp.Body).Decode(&response)
-		if err2 != nil {
+		decodeErr := json.NewDecoder(resp.Body).Decode(&response)
+		if decodeErr != nil {
 			log.Println("Failed to parse service response")
-			log.Println(err2)
+			log.Println(decodeErr)
 		} else {
-			for _, v := range response {
-				if v.Name == serviceName {
-					continue // dont try to merge values from the service which is currently running
-				}
-				body, _ := json.Marshal(counter)
-				_, errr := http.Post("http://"+v.Address+"/merge", "application/jsonn", bytes.NewBuffer(body))
-				if errr != nil {
-					log.Println("Failed to merge replica")
-					log.Println(errr)
-				}
+			if len(cachedServices) == 0 {
+				log.Println("Creating service cache for the first time")
+			}
+			for _, service := range response {
+				cachedServices[service.Name] = service
 			}
 		}
 	}
+
+	// Iterate trough the cached service list and try to push our replica to them
+	if len(cachedServices) > 0 {
+		for _, service := range cachedServices {
+			if service.Name == serviceName {
+				continue // dont try to merge values from the service which is currently running
+			}
+			body, _ := json.Marshal(counter)
+			_, mergeError := http.Post("http://"+service.Address+"/merge", "application/jsonn", bytes.NewBuffer(body))
+			if mergeError != nil {
+				log.Println("Failed to merge replica")
+				log.Println(mergeError)
+			}
+		}
+	} else {
+		log.Println("No other services available")
+	}
+
 	log.Println("Finished merging values")
 }
 
