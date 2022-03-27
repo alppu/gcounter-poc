@@ -4,9 +4,22 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 	"server/gcounter"
+
+	"github.com/google/uuid"
 )
+
+type Env string
+
+const (
+	ENV_REGISTRY_URL Env = "REGISTRY_URL"
+	ENV_PORT         Env = "PORT"
+)
+
+type Service struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
 
 var counter gcounter.GCounter
 var serviceName string
@@ -50,36 +63,6 @@ func value(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(gcounter.Value(counter))
 }
 
-type Service struct {
-	Name    string `json:"name"`
-	Address string `json:"address"`
-}
-
-func register() {
-	log.Println("Registering service")
-	req, _ := http.NewRequest("POST", "http://localhost:5000/register", nil)
-	host, _ := os.Hostname()
-	req.Header.Set("x-forwarded-for", host+":"+os.Getenv("PORT"))
-	resp, err := http.DefaultClient.Do(req)
-
-	if err != nil {
-		log.Println("Failed to register service")
-		log.Fatal(err)
-	}
-
-	var response Service
-	err2 := json.NewDecoder(resp.Body).Decode(&response)
-
-	if err2 != nil {
-		log.Println("Failed to parse response")
-		log.Fatal(err)
-	}
-
-	log.Printf("Service %+v got registered \n", response)
-	serviceName = response.Name
-	counter = gcounter.Initial(serviceName)
-}
-
 func mergeFromOthers() {
 	log.Println("Starting to merge values from others")
 
@@ -120,12 +103,26 @@ func mergeFromOthers() {
 	}
 }
 
-func main() {
-	log.Println("Starting server in port: " + os.Getenv("PORT"))
-	register()
+func registerRoutes() {
 	http.HandleFunc("/counter/", getCounter)
 	http.HandleFunc("/increment/", increment)
 	http.HandleFunc("/value", value)
 	http.HandleFunc("/merge", merge)
-	log.Fatal(http.ListenAndServe(":"+os.Getenv("PORT"), nil))
+}
+
+func main() {
+	serviceName = uuid.New().String()
+	counter = gcounter.Initial(serviceName)
+
+	port := requireEnvVar(ENV_PORT)
+	log.Println("Starting server in port: " + port)
+
+	registry_base_url := requireEnvVar(ENV_REGISTRY_URL)
+	ch := make(chan Service)
+	go registerService(registry_base_url, serviceName, ch)
+
+	registerRoutes()
+
+	log.Println("Ready to serve")
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
