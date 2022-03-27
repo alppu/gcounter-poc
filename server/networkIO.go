@@ -20,8 +20,8 @@ func registerService(registry_base_url string, serviceId string, ch chan<- Servi
 		body := []byte(`{"id": "` + serviceId + `" }`)
 		req, _ := http.NewRequest("POST", registry_base_url+"/register", bytes.NewBuffer(body))
 
-		host, _ := os.Hostname()
-		req.Header.Set("x-forwarded-for", host+":"+os.Getenv("PORT"))
+		// host, _ := os.Hostname()
+		req.Header.Set("x-forwarded-for", "localhost"+":"+os.Getenv("PORT"))
 		resp, err := http.DefaultClient.Do(req)
 
 		if err != nil {

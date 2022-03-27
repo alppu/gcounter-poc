@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -37,16 +38,11 @@ func increment(w http.ResponseWriter, r *http.Request) {
 
 	counter = gcounter.Inc(counter)
 
-	mergeFromOthers()
+	go mergeReplicas()
 
 	json.NewEncoder(w).Encode(counter)
 }
 
-/*
-Merge incoming
-*/
-// TODO: Make own function of the merge stuff,
-// extract it to a goroutine and call it everytime the counter is incremented
 func merge(w http.ResponseWriter, r *http.Request) {
 	var replica gcounter.GCounter
 	err := json.NewDecoder(r.Body).Decode(&replica)
@@ -63,44 +59,35 @@ func value(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(gcounter.Value(counter))
 }
 
-func mergeFromOthers() {
-	log.Println("Starting to merge values from others")
-
-	resp, err := http.Get("http://localhost:5000/query")
+func mergeReplicas() {
+	log.Println("Starting to merge values to others")
+	registry_base_url := requireEnvVar(ENV_REGISTRY_URL)
+	resp, err := http.Get(registry_base_url + "/query")
 
 	if err != nil {
-		log.Println("Failed to merge others")
-		log.Fatal(err)
-	}
-
-	var response []Service
-	err2 := json.NewDecoder(resp.Body).Decode(&response)
-	if err2 != nil {
-		log.Println("Failed to parse response")
-		log.Fatal(err)
-	}
-	log.Printf("Got %+v \n", response)
-	for _, v := range response {
-		if v.Name == serviceName {
-			continue // dont try to merge values from the service which is currently running
-		}
-		resp, err := http.Get("http://" + v.Address + "/counter")
-
-		if err != nil {
-			log.Println("Failed to call other service")
-			log.Fatal(err)
-		}
-
-		var replica gcounter.GCounter
-		err2 := json.NewDecoder(resp.Body).Decode(&replica)
+		log.Println("Failed to get services from service registry")
+		log.Println(err)
+	} else {
+		var response []Service
+		err2 := json.NewDecoder(resp.Body).Decode(&response)
 		if err2 != nil {
-			log.Println("Failed to parse response")
-			log.Fatal(err)
+			log.Println("Failed to parse service response")
+			log.Println(err2)
+		} else {
+			for _, v := range response {
+				if v.Name == serviceName {
+					continue // dont try to merge values from the service which is currently running
+				}
+				body, _ := json.Marshal(counter)
+				_, errr := http.Post("http://"+v.Address+"/merge", "application/jsonn", bytes.NewBuffer(body))
+				if errr != nil {
+					log.Println("Failed to merge replica")
+					log.Println(errr)
+				}
+			}
 		}
-		log.Println("start merge operation")
-		log.Println(replica.Counter)
-		counter = gcounter.Merge(counter, replica)
 	}
+	log.Println("Finished merging values")
 }
 
 func registerRoutes() {
