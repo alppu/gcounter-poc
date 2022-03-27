@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 )
 
 /*
@@ -34,14 +33,14 @@ func register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	log.Println("Registering service with")
-	// var body RegisterRequestBody
-	// err := json.NewDecoder(r.Body).Decode(&body)
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusBadRequest)
-	// }
+	var body RegisterRequestBody
+	err := json.NewDecoder(r.Body).Decode(&body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	}
 	// check if registry already includes service with same name.
 	service := Service{
-		Name:    "node-" + strconv.Itoa(len(services)),
+		Name:    body.Id,
 		Address: r.Header.Get("x-forwarded-for"),
 	}
 	log.Printf("id: %+s \n", service.Name)
@@ -57,6 +56,7 @@ func query(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	log.SetOutput(os.Stdout)
 	log.Println("Starting service registry in port: " + os.Getenv("PORT"))
 	http.HandleFunc("/register", register)
 	http.HandleFunc("/query", query)
